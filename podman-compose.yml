@@ -1,0 +1,41 @@
+version: "3"
+services:
+  vpn_gateway_openvpn:
+    image: docker.io/kylemanna/openvpn
+    container_name: vpn_gateway_openvpn
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
+    volumes:
+      - ./config/vpn.ovpn:/vpn_config/vpn.ovpn:Z,ro
+      - ./config/auth.txt:/vpn_config/auth.txt:Z,ro
+    ports:
+      - "127.0.0.1:1080:1080"
+    command: >
+      openvpn
+      --config /vpn_config/vpn.ovpn
+      --auth-user-pass /vpn_config/auth.txt
+    stdin_open: true
+    tty: true
+  
+  vpn_gateway_socksproxy:
+    image: docker.io/wernight/dante
+    container_name: vpn_gateway_socksproxy
+    network_mode: "container:vpn_gateway_openvpn"
+    depends_on:
+      - vpn_gateway_openvpn
+    volumes:
+      - ./config/danted.conf:/etc/sockd.conf:Z,ro
+    command: >
+      sh -c "
+        echo '[socks] waiting for tun0…';
+        until ip link show tun0 >/dev/null 2>&1; do sleep 1; done;
+        echo '[socks] tun0 is up, starting dante';
+        exec sockd -f /etc/sockd.conf
+      "
+    stdin_open: true
+    tty: true
