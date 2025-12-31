@@ -72,35 +72,22 @@ The SOCKS5 proxy will be available at `127.0.0.1:1080`
 2. Select "Manual proxy configuration"
 3. Set SOCKS Host: `127.0.0.1`, Port: `1080`
 4. Select "SOCKS v5"
-5. **IMPORTANT**: Uncheck "Proxy DNS when using SOCKS v5"
+5. **✅ CRITICAL**: **Check** the box **"Proxy DNS when using SOCKS v5"**. 
+   *(This forces Firefox to send domain names to the VPN container to be resolved, rather than resolving them via your local ISP).*
 
-### DNS Configuration (Recommended)
 
-Since this gateway doesn't handle DNS resolution internally, configure your application to use a public DNS resolver:
-
-- **Cloudflare DNS**: `1.1.1.1` / `1.0.0.1`
-- **Google DNS**: `8.8.8.8` / `8.8.4.4`
-
-**Firefox DNS Setup**:
-1. Open **Firefox Settings**
-2. Scroll down to **Network Settings**
-3. Click **Settings…**
-4. Under **DNS over HTTPS**, enable **Enable DNS over HTTPS**
-5. From **Use Provider**, select **Cloudflare**
-6. Set **Protection Level** to **Max Protection**
-7. Click **OK**
-
-This prevents DNS leaks and ensures your DNS queries don't use your system's default resolver.
-
-### Command Line Usage
-
+**Command Line Usage:**
+To prevent DNS leaks in the terminal, always use the `socks5h`/`socks5-hostname` protocol (which resolves DNS through the proxy):
 ```bash
-# Using curl
-curl --socks5 127.0.0.1:1080 https://ifconfig.me
-
-# Using wget
-wget -e use_proxy=yes -e socks_proxy=127.0.0.1:1080 https://ifconfig.me
+curl --socks5-hostname 127.0.0.1:1080 https://ifconfig.me
 ```
+
+#### 🔍 Why this is secure
+This setup implements **DNS Isolation**:
+- **No Host Inheritance**: The container is forbidden from reading your host's `/etc/resolv.conf`.
+- **Search Domain Stripping**: `dns_search: .` prevents your local ISP/Router domain (e.g., `fios-router.home`) from leaking into the container.
+- **Remote Resolution**: By using "Proxy DNS" in your browser, the DNS request travels *through* the encrypted VPN tunnel and is resolved by Cloudflare (1.1.1.1) from the VPN's exit point.
+
 
 ## 🔍 Verify Your Connection
 
