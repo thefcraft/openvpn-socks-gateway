@@ -5,29 +5,68 @@ services:
     container_name: vpn_gateway_openvpn
     cap_add:
       - NET_ADMIN
+      - NET_RAW
     devices:
       - /dev/net/tun:/dev/net/tun
     sysctls:
       - net.ipv6.conf.all.disable_ipv6=1
       - net.ipv6.conf.default.disable_ipv6=1
-    dns:
-      - 1.1.1.1
-      - 1.0.0.1
-    dns_search: .
-    dns_opt:
-      - "ndots:0"
     volumes:
-      - ./config/vpn.ovpn:/vpn_config/vpn.ovpn:Z,ro
-      - ./config/auth.txt:/vpn_config/auth.txt:Z,ro
+      - ./config:/vpn_config:Z,ro
     ports:
       - "127.0.0.1:1080:1080"
     command: >
-      openvpn
-      --config /vpn_config/vpn.ovpn
-      --auth-user-pass /vpn_config/auth.txt
+      sh -c "
+        # 1. RESOLVE VPN SERVER IP BEFORE LOCKDOWN
+        # Extract hostname/IP from ovpn
+        REMOTE_HOST=$$(grep '^remote ' /vpn_config/vpn.ovpn | awk '{print $$2}' | head -n 1)
+        echo '[vpn] Resolving VPN server: $$REMOTE_HOST'
+
+        # Use getent to resolve. If it's already an IP, it just returns the IP.
+        REMOTE_IP=$$(getent hosts $$REMOTE_HOST | awk '{print $$1}' | head -n 1)
+
+        # Fallback if getent fails (e.g. if REMOTE_HOST was already an IP)
+        if [ -z \"$$REMOTE_IP\" ]; then REMOTE_IP=$$REMOTE_HOST; fi
+        echo '[vpn] Lockdown initiated. Whitelisting VPN IP: $$REMOTE_IP'
+
+        
+        # 2. APPLY STRICT KILLSWITCH
+        iptables -P INPUT DROP || true
+        iptables -P FORWARD DROP || true
+        iptables -P OUTPUT DROP || true
+        
+        # Allow loopback
+        iptables -A INPUT -i lo -j ACCEPT || true
+        iptables -A OUTPUT -o lo -j ACCEPT || true
+
+        # Allow established traffic (needed for handshake stability)
+        iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT || true
+        iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT || true
+
+        # 3. WHITELIST ONLY THE VPN SERVER IP ON ETH0
+        iptables -A OUTPUT -o eth0 -d $$REMOTE_IP -j ACCEPT || true
+
+        # 4. ALLOW EVERYTHING VIA TUNNEL
+        iptables -A OUTPUT -o tun+ -j ACCEPT || true
+        iptables -A INPUT -i tun+ -j ACCEPT || true
+
+        # 5. OVERWRITE DNS SETTINGS
+        # This ensures that even if OpenVPN tries to set DNS, we use Cloudflare
+        echo 'nameserver 1.1.1.1' > /etc/resolv.conf
+        echo 'nameserver 1.0.0.1' >> /etc/resolv.conf
+
+        # 6. START OPENVPN
+        exec openvpn \
+          --config /vpn_config/vpn.ovpn \
+          --auth-user-pass /vpn_config/auth.txt \
+          --route-nopull \
+          --route 0.0.0.0 0.0.0.0 vpn_gateway \
+          --redirect-gateway def1 \
+          --pull-filter ignore \"dhcp-option DNS\"
+      "
     stdin_open: true
     tty: true
-  
+
   vpn_gateway_socksproxy:
     image: docker.io/wernight/dante
     container_name: vpn_gateway_socksproxy
