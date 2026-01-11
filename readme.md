@@ -2,8 +2,8 @@
 
 A lightweight, high-security OpenVPN to SOCKS5 gateway. It uses a strict "Fail-Closed" killswitch and DNS isolation to ensure your real IP and DNS queries never leak, even if the VPN connection drops.
 
-**Note**
-The Readme was AI-generated. (cause i hate writing by my own...)
+## ⚠️ Note
+This README was AI-generated (because I hate writing it myself).
 
 ## 🛡️ Security Features
 
