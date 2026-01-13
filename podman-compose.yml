@@ -16,7 +16,7 @@ services:
       DNS_SECONDARY: ${DNS_SECONDARY:-1.0.0.1}
     volumes:
       - ./config/auth.txt:/vpn_config/auth.txt:Z,ro
-      - ./config/vpn.ovpn:/vpn_config/vpn.ovpn:Z,ro
+      - ./config/${VPN_CONFIG_FILE_NAME:-vpn.ovpn}:/vpn_config/vpn.ovpn:Z,ro
       - ./scripts/start-openvpn.sh:/scripts/start-openvpn.sh:Z,ro
     ports:
       - "${SOCKS_BIND_HOST:-127.0.0.1}:${SOCKS_BIND_PORT:-1080}:1080"
